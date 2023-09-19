@@ -59,7 +59,7 @@ public class OceanBaseContainerITCase {
 
     @ClassRule
     public static final OceanBaseContainer OB_SERVER =
-            new OceanBaseContainer("whhe/oceanbase-ce:4.2.0.0")
+            new OceanBaseContainer("oceanbase/oceanbase-ce:4.2.0.0")
                     .withNetworkMode("host")
                     .withEnv("MODE", "slim")
                     .withEnv("OB_ROOT_PASSWORD", SYS_PASSWORD)
