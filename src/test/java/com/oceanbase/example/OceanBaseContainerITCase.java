@@ -18,23 +18,15 @@
 
 package com.oceanbase.example;
 
-import com.oceanbase.clogproxy.client.LogProxyClient;
-import com.oceanbase.clogproxy.client.config.ClientConf;
-import com.oceanbase.clogproxy.client.config.ObReaderConfig;
-import com.oceanbase.clogproxy.client.exception.LogProxyClientException;
-import com.oceanbase.clogproxy.client.listener.RecordListener;
-import com.oceanbase.oms.logmessage.DataMessage;
-import com.oceanbase.oms.logmessage.LogMessage;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.time.Duration;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
-import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import org.apache.flink.streaming.api.CheckpointingMode;
+import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -54,8 +46,7 @@ public class OceanBaseContainerITCase {
     private static final String SYS_PASSWORD = "password";
     private static final String TENANT = "test";
     private static final String USERNAME = "root@" + TENANT;
-    private static final String PASSWORD = "testPassword";
-    private static final String DATABASE = "it";
+    private static final String PASSWORD = "123456";
 
     @ClassRule
     public static final OceanBaseContainer OB_SERVER =
@@ -104,102 +95,37 @@ public class OceanBaseContainerITCase {
 
     @Test
     public void testOceanBaseCDC() throws Exception {
-        ObReaderConfig config = new ObReaderConfig();
-        config.setRsList("127.0.0.1:2882:2881");
-        config.setUsername(USERNAME);
-        config.setPassword(PASSWORD);
-        config.setStartTimestamp(0L);
-        config.setTableWhiteList(TENANT + ".*.*");
-        config.setWorkingMode("memory");
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.enableCheckpointing(1000, CheckpointingMode.EXACTLY_ONCE);
+        // env.getConfig()
+        // env.getCheckpointConfig().setCheckpointStorage("file:///d:/checkpoint");
+        //        env.getCheckpointConfig().setCheckpointStorage("file:///Users/boleyn/checkpoint");
 
-        ClientConf clientConf =
-                ClientConf.builder()
-                        .transferQueueSize(1000)
-                        .connectTimeoutMs(3000)
-                        .maxReconnectTimes(100)
-                        .ignoreUnknownRecordType(true)
-                        .build();
+        StreamTableEnvironment tenv = StreamTableEnvironment.create(env);
+        // tenv.getConfig().getConfiguration().setString("table.exec.sink.not-null-enforcer",
+        // "DROP");
 
-        LogProxyClient client = new LogProxyClient(LOG_PROXY.getHost(), 2983, config, clientConf);
-        final CountDownLatch latch = new CountDownLatch(1);
+        tenv.executeSql(
+                "CREATE TABLE products (\n"
+                        + "    rowid INT,\n"
+                        + "    name STRING,\n"
+                        + "    description STRING,\n"
+                        + "    PRIMARY KEY (rowid) NOT ENFORCED\n"
+                        + "  ) WITH (\n"
+                        + "    'connector' = 'oceanbase-cdc',\n"
+                        + "    'scan.startup.mode' = 'initial',\n"
+                        + "    'username' = 'root@test',\n"
+                        + "    'password' = '123456',\n"
+                        + "    'tenant-name' = 'test',\n"
+                        + "    'table-list' = 'test.products',\n"
+                        + "    'hostname' = '127.0.0.1',\n"
+                        + "    'port' = '2881',\n"
+                        + "    'rootserver-list' = '127.0.0.1:2882:2881',\n"
+                        + "    'logproxy.host' = '127.0.0.1',\n"
+                        + "    'logproxy.port' = '2983',\n"
+                        + "    'working-mode' = 'memory'\n"
+                        + " )");
 
-        client.addListener(
-                new RecordListener() {
-
-                    boolean started = false;
-
-                    @Override
-                    public void notify(LogMessage message) {
-                        if (!started) {
-                            started = true;
-                            latch.countDown();
-                        }
-                        switch (message.getOpt()) {
-                            case INSERT:
-                            case UPDATE:
-                            case DELETE:
-                                // note that the db name contains prefix '{tenant}.'
-                                LOG.info(
-                                        "Received log message of type {}: db: {}, table: {}, checkpoint {}",
-                                        message.getOpt(),
-                                        message.getDbName(),
-                                        message.getTableName(),
-                                        message.getCheckpoint());
-                                // old fields for type 'UPDATE', 'DELETE'
-                                LOG.info(
-                                        "Old field values: {}",
-                                        message.getFieldList().stream()
-                                                .filter(DataMessage.Record.Field::isPrev)
-                                                .collect(Collectors.toList()));
-                                // new fields for type 'UPDATE', 'INSERT'
-                                LOG.info(
-                                        "New field values: {}",
-                                        message.getFieldList().stream()
-                                                .filter(field -> !field.isPrev())
-                                                .collect(Collectors.toList()));
-                                break;
-                            case HEARTBEAT:
-                                LOG.info(
-                                        "Received heartbeat message with checkpoint {}",
-                                        message.getCheckpoint());
-                                break;
-                            case BEGIN:
-                            case COMMIT:
-                                LOG.info("Received transaction message {}", message.getOpt());
-                                break;
-                            case DDL:
-                                LOG.info(
-                                        "Received log message with DDL: {}",
-                                        message.getFieldList().get(0).getValue().toString());
-                                break;
-                            default:
-                                throw new IllegalArgumentException(
-                                        "Unsupported log message type: " + message.getOpt());
-                        }
-                    }
-
-                    @Override
-                    public void onException(LogProxyClientException e) {
-                        LOG.error(e.getMessage());
-                    }
-                });
-        client.start();
-
-        if (!latch.await(30, TimeUnit.SECONDS)) {
-            throw new TimeoutException("Timeout to receive messages in RecordListener");
-        }
-
-        try (Connection connection =
-                        DriverManager.getConnection(OB_SERVER.getJdbcUrl(), USERNAME, PASSWORD);
-                Statement statement = connection.createStatement()) {
-
-            statement.execute("USE " + DATABASE);
-            statement.execute("CREATE TABLE user (id INT(10) PRIMARY KEY , name VARCHAR(20))");
-            statement.execute("INSERT INTO user VALUES (1, 'wanghe') ");
-            statement.execute("DROP TABLE user");
-        }
-
-        Thread.sleep(20_000);
-        client.stop();
+        tenv.executeSql("select * from products").print();
     }
 }
