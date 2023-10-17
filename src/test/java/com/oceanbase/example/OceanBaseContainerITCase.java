@@ -107,10 +107,10 @@ public class OceanBaseContainerITCase {
 
         tenv.executeSql(
                 "CREATE TABLE products (\n"
-                        + "    rowid INT,\n"
+                        + "    ROWID INT,\n"
                         + "    name STRING,\n"
                         + "    description STRING,\n"
-                        + "    PRIMARY KEY (rowid) NOT ENFORCED\n"
+                        + "    PRIMARY KEY (ROWID) NOT ENFORCED\n"
                         + "  ) WITH (\n"
                         + "    'connector' = 'oceanbase-cdc',\n"
                         + "    'scan.startup.mode' = 'initial',\n"
