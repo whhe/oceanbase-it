@@ -195,8 +195,12 @@ public class OceanBaseContainerITCase {
 
             statement.execute("USE " + DATABASE);
             statement.execute("CREATE TABLE user (id INT(10) PRIMARY KEY , name VARCHAR(20))");
-            statement.execute("INSERT INTO user VALUES (1, 'wanghe') ");
+            statement.execute("INSERT INTO user VALUES (1, 'tom') ");
+            statement.execute("INSERT INTO user VALUES (2, 'jerry') ");
+            statement.execute("INSERT INTO user VALUES (3, 'li lei') ");
+            statement.execute("INSERT INTO user VALUES (4, 'han meimei') ");
             statement.execute("DROP TABLE user");
+            statement.execute("DROP DATABASE " + DATABASE);
         }
 
         Thread.sleep(20_000);
