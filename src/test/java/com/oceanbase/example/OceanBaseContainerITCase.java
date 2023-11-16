@@ -134,42 +134,42 @@ public class OceanBaseContainerITCase {
                             started = true;
                             latch.countDown();
                         }
+                        try {
+                            LOG.info(
+                                    "Received log message with type: {}, txId: {}, checkpoint: {}. ts: {}, ts_us: {}",
+                                    message.getOpt(),
+                                    message.getMessageUniqueId(),
+                                    message.getCheckpoint(),
+                                    message.getTimestamp(),
+                                    message.getTimestampUsec());
+                        } catch (Exception e) {
+                            LOG.error(e.getMessage());
+                        }
+
                         switch (message.getOpt()) {
+                            case HEARTBEAT:
+                            case BEGIN:
+                            case COMMIT:
+                                break;
                             case INSERT:
                             case UPDATE:
                             case DELETE:
                                 // note that the db name contains prefix '{tenant}.'
                                 LOG.info(
-                                        "Received log message of type {}: db: {}, table: {}, checkpoint {}",
-                                        message.getOpt(),
+                                        "DML db: {}, table: {}, checkpoint {}, before: {}, after: {}",
                                         message.getDbName(),
                                         message.getTableName(),
-                                        message.getCheckpoint());
-                                // old fields for type 'UPDATE', 'DELETE'
-                                LOG.info(
-                                        "Old field values: {}",
+                                        message.getCheckpoint(),
                                         message.getFieldList().stream()
                                                 .filter(DataMessage.Record.Field::isPrev)
-                                                .collect(Collectors.toList()));
-                                // new fields for type 'UPDATE', 'INSERT'
-                                LOG.info(
-                                        "New field values: {}",
+                                                .collect(Collectors.toList()),
                                         message.getFieldList().stream()
                                                 .filter(field -> !field.isPrev())
                                                 .collect(Collectors.toList()));
                                 break;
-                            case HEARTBEAT:
-                                LOG.info(
-                                        "Received heartbeat message with checkpoint {}",
-                                        message.getCheckpoint());
-                                break;
-                            case BEGIN:
-                            case COMMIT:
-                                LOG.info("Received transaction message {}", message.getOpt());
-                                break;
                             case DDL:
                                 LOG.info(
-                                        "Received log message with DDL: {}",
+                                        "DDL: {}",
                                         message.getFieldList().get(0).getValue().toString());
                                 break;
                             default:
