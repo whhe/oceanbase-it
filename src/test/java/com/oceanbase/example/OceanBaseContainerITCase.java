@@ -44,6 +44,7 @@ public class OceanBaseContainerITCase {
                     .withEnv("MODE", "slim")
                     .withEnv("OB_ROOT_PASSWORD", SYS_PASSWORD)
                     .withEnv("OB_TENANT_NAME", TENANT)
+                    .withEnv("FASTBOOT", "true")
                     .withCopyFileToContainer(
                             MountableFile.forClasspathResource("init.sql"),
                             "/root/boot/init.d/init.sql")
@@ -61,7 +62,8 @@ public class OceanBaseContainerITCase {
 
     private boolean connected() {
         try (Connection connection =
-                        DriverManager.getConnection("jdbc:mysql://127.0.0.1:2881", "root@test", "");
+                        DriverManager.getConnection(
+                                "jdbc:mysql://127.0.0.1:2881", "root@test", "");
                 Statement statement = connection.createStatement()) {
             ResultSet rs = statement.executeQuery("select version()");
             return rs.next();
